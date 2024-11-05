@@ -19,11 +19,13 @@ ArduinoLEDMatrix matrix;
 const long blocksPerHalving = 210000;
 const float initialReward = 50.0;
 const float maxSupply = 21000000.0;
+const long SATOSHIS_IN_ONE_BTC = 100000000;
 
-const char* ssid = "EndTheFed";  // Replace with your WiFi network name
-const char* password = "NoW1r3s4Me";  // Replace with your WiFi password
-
-long SATOSHIS_IN_ONE_BTC = 100000000;
+//TODO parse from json settings file
+const char* ssid = "FederalReserve";  // Replace with your WiFi network name
+const char* password = "MoneyPrinterGoBrrr";  // Replace with your WiFi password
+const int delayMillis = 5000;
+float percentMined = 0;
 
 void setup() {
   Serial.begin(9600);
@@ -33,19 +35,20 @@ void setup() {
     Serial.println(F("SSD1306 allocation failed"));
     for(;;);
   }
+  
   display.clearDisplay();
   display.setTextColor(SSD1306_WHITE);
 
   Serial.print("Connecting to WiFi...");
   WiFi.begin(ssid, password);
   while (WiFi.status() != WL_CONNECTED) {
-    delay(1000);
+    delay(delayMillis);
     Serial.print(".");
   }
   Serial.println("\nConnected to WiFi!");
   displayCenteredText("Connected to WiFi", 1, 0, 0);
   matrix.begin();
-  drawBitcoinB();
+  drawBitcoin();
 }
 
 void loop() {
@@ -55,17 +58,15 @@ void loop() {
   String blockHeightStr = getBitcoinBlockHeight();
 
   if (blockHeightStr == "-1") {
+    display.setTextSize(1);
+    display.setCursor(0, 0);
     display.print("Error fetching block height");
   } else {
     String blockLabel = "-Block Height-"; 
     displayCenteredText(blockLabel, 1, 0, -12);
     displayCenteredText(formatWithCommas(blockHeightStr), 2, 0, 0);
-  }
-  display.display();
-  delay(5000);  // Wait before fetching prices
-
-  float percentMined = 0;
-  if(blockHeightStr != "-1"){
+    display.display();
+    delay(delayMillis);  // Wait before fetching prices
     display.clearDisplay();
     displayCenteredText("-Percent Mined-", 1, 0, -12);
     percentMined = calculatePercentageMined(blockHeightStr.toInt()); 
@@ -73,15 +74,15 @@ void loop() {
   }
 
   Serial.println("Getting Bitcoin price...");
-  display.clearDisplay();
   String priceUSD = getBitcoinPrice("USD");
 
+  display.clearDisplay();
   if (priceUSD == "-1") {
     display.print("Error fetching price");
   } else {
     displayCenteredText("-USD per BTC-", 1, 0, -12);
     displayCenteredText("$"+formatWithCommas(priceUSD), 2, 0, 0);
-    delay(5000); 
+    delay(delayMillis); 
 
     int satsPerDollar = SATOSHIS_IN_ONE_BTC / priceUSD.toInt();
     display.clearDisplay();
@@ -94,11 +95,10 @@ void loop() {
     display.print("----");
     display.setCursor(10, 21);
     display.print("UTC+3");
-    // Display the Satoshis per Dollar on the right side with larger text
     display.setTextSize(2); // Large text for the value
     displayCenteredText(moscowTime(satsPerDollar), 2, 12, 0);
     display.display();
-    delay(5000);  // Wait 10 seconds before updating again
+    delay(delayMillis);  // Wait 5 seconds before updating again
   }
 
   if(blockHeightStr != "-1" && priceUSD != "-1"){
@@ -106,7 +106,11 @@ void loop() {
       display.clearDisplay();
       displayCenteredText("-Market Cap-", 1, 0, -12);
       displayCenteredText(String(marketCap), 2, 0, 0);
+  } else {
+    display.clearDisplay();
+    display.print("Error fetching market cap");
   }
+
 }
 
 String moscowTime(int satsPerDollar) {
@@ -236,7 +240,7 @@ void checkWiFiConnection() {
 
     // Keep trying to reconnect for 10 seconds
     while (WiFi.status() != WL_CONNECTED && millis() - startAttemptTime < 10000) {
-      delay(500); // Small delay between each retry
+      delay(1000); // Small delay between each retry
       Serial.print(".");
     }
 
@@ -279,7 +283,7 @@ String formatWithCommas(String numberStr) {
   return numberStr;
 }
 
-void drawBitcoinB() {
+void drawBitcoin() {
   matrix.clear();
   uint32_t bitcoin[][4] = {
     {
@@ -295,22 +299,22 @@ void drawBitcoinB() {
       66
     },
     {
-        0x3184a444,
-        0x44042081,
-        0x100a0040
+      0x3184a444,
+      0x44042081,
+      0x100a0040
     },
     {
-        0x318ff830,
-        0xc3f830c3,
-        0xcff8318,
-        66
+      0x318ff830,
+      0xc3f830c3,
+      0xcff8318,
+      66
     }
   };
 
   matrix.stroke(0xFFFFFFFF);
   matrix.textScrollSpeed(50);
 
-  const char text[] = "  Buy Bitcoin  ";
+  const char text[] = " Buy Bitcoin ";
   matrix.textFont(Font_5x7);
   matrix.beginText(0, 1, 0xFFFFFF);
   matrix.println(text);
