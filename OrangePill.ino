@@ -20,8 +20,8 @@ const long blocksPerHalving = 210000;
 const float initialReward = 50.0;
 const float maxSupply = 21000000.0;
 
-const char* ssid = "EndTheFed";  // Replace with your WiFi network name
-const char* password = "NoW1r3s4Me";  // Replace with your WiFi password
+const char* ssid = "FederalReserve";  // Replace with your WiFi network name
+const char* password = "MoneyPrinterGoBrrr";  // Replace with your WiFi password
 
 long SATOSHIS_IN_ONE_BTC = 100000000;
 
