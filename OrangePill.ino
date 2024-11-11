@@ -47,12 +47,18 @@ void setup() {
   }
   Serial.println("\nConnected to WiFi!");
   displayCenteredText("Connected to WiFi", 1, 0, 0);
+  delay(500);
+  display.clearDisplay();
+  displayCenteredText("Buy Bitcoin", 1, 0, 0);
   matrix.begin();
   drawBitcoin();
 }
 
 void loop() {
-  checkWiFiConnection();
+  if (WiFi.status() != WL_CONNECTED) {
+    connectToWiFi();
+  }
+
   Serial.println("Getting block height...");
   display.clearDisplay();
   String blockHeightStr = getBitcoinBlockHeight();
@@ -64,13 +70,13 @@ void loop() {
   } else {
     String blockLabel = "-Block Height-"; 
     displayCenteredText(blockLabel, 1, 0, -12);
-    displayCenteredText(formatWithCommas(blockHeightStr), 2, 0, 0);
+    displayCenteredText(formatWithCommas(blockHeightStr), 2, 0, 3);
     display.display();
     delay(delayMillis);  // Wait before fetching prices
     display.clearDisplay();
     displayCenteredText("-Percent Mined-", 1, 0, -12);
     percentMined = calculatePercentageMined(blockHeightStr.toInt()); 
-    displayCenteredText(String(percentMined) + "%", 2, 0, 0);
+    displayCenteredText(String(percentMined) + "%", 2, 0, 3);
   }
 
   Serial.println("Getting Bitcoin price...");
@@ -81,7 +87,7 @@ void loop() {
     display.print("Error fetching price");
   } else {
     displayCenteredText("-USD per BTC-", 1, 0, -12);
-    displayCenteredText("$"+formatWithCommas(priceUSD), 2, 0, 0);
+    displayCenteredText("$"+formatWithCommas(priceUSD), 2, 0, 3);
     delay(delayMillis); 
 
     int satsPerDollar = SATOSHIS_IN_ONE_BTC / priceUSD.toInt();
@@ -96,19 +102,40 @@ void loop() {
     display.setCursor(10, 21);
     display.print("UTC+3");
     display.setTextSize(2); // Large text for the value
-    displayCenteredText(moscowTime(satsPerDollar), 2, 12, 0);
+    displayCenteredText(moscowTime(satsPerDollar), 2, 12, 3);
     display.display();
     delay(delayMillis);  // Wait 5 seconds before updating again
   }
 
   if(blockHeightStr != "-1" && priceUSD != "-1"){
-      String marketCap = calculateMarketCap(priceUSD.toFloat(), percentMined); 
-      display.clearDisplay();
-      displayCenteredText("-Market Cap-", 1, 0, -12);
-      displayCenteredText(String(marketCap), 2, 0, 0);
+    String marketCap = calculateMarketCap(priceUSD.toFloat(), percentMined); 
+    display.clearDisplay();
+    displayCenteredText("-Market Cap-", 1, 0, -12);
+    displayCenteredText(String(marketCap), 2, 0, 3);
   } else {
     display.clearDisplay();
     display.print("Error fetching market cap");
+  }
+
+  Serial.println("Getting Fees");
+  String fastestFee = getFastestFee();
+
+  if(fastestFee != "-1"){
+    display.clearDisplay();
+    display.setTextSize(1);
+    display.setCursor(15, 12);
+    display.print("sats");
+    display.setCursor(10, 17);
+    display.print("-----");
+    display.setCursor(12, 17);
+    display.print("----");
+    display.setCursor(10, 23);
+    display.print("vByte");
+    displayCenteredText("-Fastest Fee-", 1, 0, -12);
+    displayCenteredText(fastestFee, 2, 12, 2);
+  } else {
+    display.clearDisplay();
+    display.print("Error fetching fastest fee");
   }
 
 }
@@ -151,6 +178,41 @@ String getBitcoinBlockHeight() {
           }
         }
         return String(highestHeight);
+      } else {
+        Serial.print("JSON deserialization failed: ");
+        Serial.println(error.f_str());
+      }
+    } else {
+      Serial.print("HTTP request failed, error code: ");
+      Serial.println(httpResponseCode);
+    }
+    http.close();
+  } else {
+    Serial.println("WiFi not connected");
+  }
+  return "-1";
+}
+
+String getFastestFee(void){
+  if (WiFi.status() == WL_CONNECTED) {
+    http.begin(client, "https://mempool.space/api/v1/fees/recommended", 443);
+    http.setTimeout(3000);
+    int httpResponseCode = http.GET();
+    if (httpResponseCode == HTTP_CODE_OK) {
+      String response = http.getBody();
+      http.close();
+      Serial.println("Fee data retrieved");
+
+      DynamicJsonDocument doc(1024);
+      DeserializationError error = deserializeJson(doc, response);
+
+      if (!error) {
+        if (doc.containsKey("fastestFee")) {
+          int fee = doc["fastestFee"];
+          return String(fee);
+        } else {
+          Serial.print("Fee not found");
+        }
       } else {
         Serial.print("JSON deserialization failed: ");
         Serial.println(error.f_str());
@@ -224,42 +286,28 @@ String getBitcoinPrice(const char* currency) {
   return "-1";
 }
 
-void checkWiFiConnection() {
-  if (WiFi.status() != WL_CONNECTED) {
-    Serial.println("WiFi disconnected. Attempting to reconnect...");
-    display.clearDisplay();
-    display.setCursor(0, 0);
-    display.setTextSize(1);
-    display.print("Reconnecting WiFi...");
-    display.display();
+void connectToWiFi() {
+  Serial.print("Connecting to WiFi...");
+  display.clearDisplay();
+  display.setTextSize(1);
+  display.setTextColor(SSD1306_WHITE);
+  display.setCursor(0, 0);
+  display.print("Connecting to WiFi...");
+  display.display();
 
-    WiFi.disconnect();  // Optional: Ensure we start fresh
-    WiFi.begin(ssid, password);
+  WiFi.begin(ssid, password);
 
-    unsigned long startAttemptTime = millis();
-
-    // Keep trying to reconnect for 10 seconds
-    while (WiFi.status() != WL_CONNECTED && millis() - startAttemptTime < 10000) {
-      delay(1000); // Small delay between each retry
-      Serial.print(".");
-    }
-
-    if (WiFi.status() == WL_CONNECTED) {
-      Serial.println("\nReconnected to WiFi!");
-      display.clearDisplay();
-      display.setCursor(0, 0);
-      display.print("Reconnected to WiFi!");
-      display.display();
-      delay(2000);  // Display success message briefly
-    } else {
-      Serial.println("\nFailed to reconnect to WiFi.");
-      display.clearDisplay();
-      display.setCursor(0, 0);
-      display.print("WiFi reconnect failed.");
-      display.display();
-      delay(2000);  // Display failure message briefly
-    }
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
   }
+
+  Serial.println("Connected!");
+  display.clearDisplay();
+  display.setCursor(0, 0);
+  display.print("Connected to WiFi!");
+  display.display();
+  delay(2000); // Display the message for 2 seconds
 }
 
 void displayCenteredText(const String &text, int textSize, int16_t xOffset, int16_t yOffset) {
@@ -285,34 +333,24 @@ String formatWithCommas(String numberStr) {
 
 void drawBitcoin() {
   matrix.clear();
-  uint32_t bitcoin[][4] = {
+
+
+  const uint32_t bitcoin[][4] = {
     {
-      0x901f808,
-      0x80f00880,
-      0x881f8090,
-      66
-    },
-    {
-      0x903fc18,
-      0xc1fc1fc1,
-      0x8c3fc090,
+      0x1203f011,
+      0x1e01101,
+      0x103f0120,
       66
     },
     {
       0x3184a444,
-      0x44042081,
+      0x44042081, //heart
       0x100a0040
-    },
-    {
-      0x318ff830,
-      0xc3f830c3,
-      0xcff8318,
-      66
     }
   };
 
   matrix.stroke(0xFFFFFFFF);
-  matrix.textScrollSpeed(50);
+  matrix.textScrollSpeed(35);
 
   const char text[] = " Buy Bitcoin ";
   matrix.textFont(Font_5x7);
@@ -320,16 +358,10 @@ void drawBitcoin() {
   matrix.println(text);
   matrix.endText(SCROLL_LEFT);
   matrix.endDraw();
-  
   delay(1000); 
   matrix.loadFrame(bitcoin[0]);
-  
   delay(1000); 
   matrix.loadFrame(bitcoin[1]);
-    
-  delay(1000); 
-  matrix.loadFrame(bitcoin[2]);
-  
   delay(1000); 
   matrix.loadFrame(bitcoin[0]);
 }
